@@ -1,96 +1,53 @@
 import pytest
-import boto3
-from moto import mock_aws
-from unittest.mock import patch
-import pandas as pd
-import io
-import pyarrow.parquet as pq
+from pyspark.sql import SparkSession
+from mock_glue import MockGlueContext
+from glue_job import convert_csv_to_parquet, run_glue_job
 
-# Import the function to be tested
-from glue_job import convert_csv_to_parquet
+@pytest.fixture(scope="session")
+def spark():
+    return SparkSession.builder.getOrCreate()
 
-@pytest.fixture(scope='function')
-def aws_credentials():
-    """Mocked AWS Credentials for moto."""
-    import os
-    os.environ['AWS_ACCESS_KEY_ID'] = 'testing'
-    os.environ['AWS_SECRET_ACCESS_KEY'] = 'testing'
-    os.environ['AWS_SECURITY_TOKEN'] = 'testing'
-    os.environ['AWS_SESSION_TOKEN'] = 'testing'
-    os.environ['AWS_DEFAULT_REGION'] = 'us-east-1'
+@pytest.fixture(scope="function")
+def mock_glue_context():
+    return MockGlueContext()
 
-@pytest.fixture(scope='function')
-def s3(aws_credentials):
-    with mock_aws():
-        yield boto3.client('s3', region_name='us-east-1')
+def test_convert_csv_to_parquet(spark, tmp_path):
+    # Create a sample CSV file
+    input_data = [("1", "Alice", "25"), ("2", "Bob", "30"), ("3", "Charlie", "35")]
+    input_df = spark.createDataFrame(input_data, ["id", "name", "age"])
+    input_path = str(tmp_path / "input.csv")
+    input_df.write.csv(input_path, header=True)
 
-@pytest.fixture(scope='function')
-def glue_context():
-    with patch('awsglue.context.GlueContext') as mock_glue_context:
-        yield mock_glue_context.return_value
+    # Set up output path
+    output_path = str(tmp_path / "output.parquet")
 
-def create_csv_file():
-    df = pd.DataFrame({
-        'id': [1, 2, 3],
-        'name': ['Alice', 'Bob', 'Charlie'],
-        'age': [25, 30, 35]
-    })
-    csv_buffer = io.StringIO()
-    df.to_csv(csv_buffer, index=False)
-    return csv_buffer.getvalue()
+    # Run the conversion
+    convert_csv_to_parquet(spark, input_path, output_path)
 
-def test_convert_csv_to_parquet(s3, glue_context):
-    # Set up test data
-    raw_bucket = 'raw-bucket'
-    raw_key = 'input/data.csv'
-    prep_bucket = 'prep-bucket'
-    prep_key = 'output/data.parquet'
-    
-    # Create buckets
-    s3.create_bucket(Bucket=raw_bucket)
-    s3.create_bucket(Bucket=prep_bucket)
-    
-    # Upload test CSV file
-    csv_content = create_csv_file()
-    s3.put_object(Bucket=raw_bucket, Key=raw_key, Body=csv_content)
-    
-    # Mock GlueContext methods
-    mock_dynamic_frame = glue_context.create_dynamic_frame.from_options.return_value
-    
-    # Call the function
-    convert_csv_to_parquet(glue_context, raw_bucket, raw_key, prep_bucket, prep_key)
-    
-    # Assert that the correct methods were called
-    glue_context.create_dynamic_frame.from_options.assert_called_once_with(
-        format_options={"quoteChar": '"', "withHeader": True, "separator": ","},
-        connection_type="s3",
-        format="csv",
-        connection_options={
-            "paths": [f"s3://{raw_bucket}/{raw_key}"],
-            "recurse": True,
-        },
-        transformation_ctx="datasource0",
-    )
-    
-    glue_context.write_dynamic_frame.from_options.assert_called_once_with(
-        frame=mock_dynamic_frame,
-        connection_type="s3",
-        format="parquet",
-        connection_options={
-            "path": f"s3://{prep_bucket}/{prep_key}",
-            "partitionKeys": [],
-        },
-        transformation_ctx="datasink1",
-    )
-    
-    # Optionally, verify the Parquet file content
-    # Note: This part is commented out because moto doesn't actually create the Parquet file
-    # In a real scenario, you might want to download and verify the Parquet file
-    
-    # response = s3.get_object(Bucket=prep_bucket, Key=prep_key)
-    # parquet_content = response['Body'].read()
-    # parquet_file = io.BytesIO(parquet_content)
-    # parquet_df = pq.read_table(parquet_file).to_pandas()
-    # 
-    # assert len(parquet_df) == 3
-    # assert list(parquet_df.columns) == ['id', 'name', 'age']
+    # Read the Parquet file and verify
+    output_df = spark.read.parquet(output_path)
+    assert output_df.count() == 3
+    assert output_df.columns == ["id", "name", "age"]
+
+def test_run_glue_job(mock_glue_context, tmp_path):
+    # Set up input and output paths
+    input_path = str(tmp_path / "input.csv")
+    output_path = str(tmp_path / "output.parquet")
+
+    # Create a sample CSV file
+    spark = mock_glue_context.spark_session
+    input_data = [("1", "Alice", "25"), ("2", "Bob", "30"), ("3", "Charlie", "35")]
+    input_df = spark.createDataFrame(input_data, ["id", "name", "age"])
+    input_df.write.csv(input_path, header=True)
+
+    # Run the Glue job
+    params = {
+        'input_path': input_path,
+        'output_path': output_path
+    }
+    run_glue_job(mock_glue_context, params)
+
+    # Verify the output
+    output_df = spark.read.parquet(output_path)
+    assert output_df.count() == 3
+    assert output_df.columns == ["id", "name", "age"]
