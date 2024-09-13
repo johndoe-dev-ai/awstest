@@ -1,53 +1,26 @@
-# awstest
+ I apologize for the confusion. The error you're encountering suggests that there might be an issue with the moto library installation or import. Let's troubleshoot this issue and provide an alternative approach.
 
-To set up a regression testing framework using Behave for AWS Lambda functions and Glue jobs, you'll need to create a structured project and implement the necessary components. Here's a step-by-step guide to help you set up this framework:
+First, let's check a few things:
 
-1. Set up your project structure:
-
-
-
-<antArtifact identifier="project-structure" type="application/vnd.ant.code" language="plaintext" title="Behave Project Structure for AWS Testing">
-your_project/
-├── features/
-│   ├── steps/
-│   │   ├── lambda_steps.py
-│   │   └── glue_steps.py
-│   ├── environment.py
-│   ├── lambda_tests.feature
-│   └── glue_tests.feature
-├── utils/
-│   ├── aws_utils.py
-│   └── test_data.py
-├── requirements.txt
-└── behave.ini
-</antArtifact>
-
-2. Install required packages:
-
-Create a `requirements.txt` file with the following content:
+1. Make sure you have the latest version of moto installed:
 
 ```
-behave
-boto3
-moto
-pytest
+pip install --upgrade moto
 ```
 
-Then install the packages:
+2. If you're using a virtual environment, ensure it's activated when you install packages and run your tests.
 
-```
-pip install -r requirements.txt
-```
+3. Check that you're using a compatible version of Python. Moto supports Python 3.6+.
 
-3. Implement AWS utility functions:
+If the issue persists, we can modify our approach to use moto in a slightly different way. Instead of importing specific mock decorators, we can use the `mock_aws` decorator which provides a more general mocking capability.
 
-Create `utils/aws_utils.py` to handle AWS interactions:
+Let's update the `aws_utils.py` file to use this approach:
 
 
 
-<antArtifact identifier="aws-utils" type="application/vnd.ant.code" language="python" title="AWS Utility Functions">
+<antArtifact identifier="aws-utils" type="application/vnd.ant.code" language="python" title="Updated AWS Utility Functions">
 import boto3
-from moto import mock_lambda, mock_glue
+from moto import mock_aws
 
 def invoke_lambda(function_name, payload):
     lambda_client = boto3.client('lambda')
@@ -65,7 +38,7 @@ def start_glue_job(job_name, arguments=None):
     )
     return response
 
-@mock_lambda
+@mock_aws
 def create_mock_lambda(function_name, handler, role, code):
     lambda_client = boto3.client('lambda')
     response = lambda_client.create_function(
@@ -77,7 +50,7 @@ def create_mock_lambda(function_name, handler, role, code):
     )
     return response
 
-@mock_glue
+@mock_aws
 def create_mock_glue_job(job_name, role, command):
     glue_client = boto3.client('glue')
     response = glue_client.create_job(
@@ -88,20 +61,18 @@ def create_mock_glue_job(job_name, role, command):
     return response
 </antArtifact>
 
-4. Implement Behave steps:
-
-Create `features/steps/lambda_steps.py` and `features/steps/glue_steps.py` to define the steps for your tests.
-
-Here's an example for `lambda_steps.py`:
+Now, let's update the `lambda_steps.py` file to use this new approach:
 
 
 
-<antArtifact identifier="lambda-steps" type="application/vnd.ant.code" language="python" title="Behave Steps for Lambda Testing">
+<antArtifact identifier="lambda-steps" type="application/vnd.ant.code" language="python" title="Updated Behave Steps for Lambda Testing">
 from behave import given, when, then
 from utils.aws_utils import create_mock_lambda, invoke_lambda
+from moto import mock_aws
 import json
 
 @given('a Lambda function named "{function_name}"')
+@mock_aws
 def step_create_lambda(context, function_name):
     context.function_name = function_name
     create_mock_lambda(
@@ -112,6 +83,7 @@ def step_create_lambda(context, function_name):
     )
 
 @when('I invoke the Lambda function with payload')
+@mock_aws
 def step_invoke_lambda(context):
     payload = json.dumps({"key": "value"})
     context.response = invoke_lambda(context.function_name, payload)
@@ -126,56 +98,21 @@ def step_check_lambda_response(context, message):
     assert message in response_payload['body']
 </antArtifact>
 
-5. Create feature files:
+These changes should resolve the import issue you were facing. The `@mock_aws` decorator is more general and should work without needing to import specific mock functions for each AWS service.
 
-Create `features/lambda_tests.feature` and `features/glue_tests.feature` to define your test scenarios.
+A few additional tips:
 
-Here's an example for `lambda_tests.feature`:
-
-
-
-<antArtifact identifier="lambda-feature" type="application/vnd.ant.code" language="gherkin" title="Behave Feature for Lambda Testing">
-Feature: AWS Lambda Function Tests
-
-  Scenario: Invoke Lambda function and check response
-    Given a Lambda function named "test-function"
-    When I invoke the Lambda function with payload
-    Then the Lambda function should return status code 200
-    And the Lambda function response should contain "Hello, World!"
-
-  Scenario: Test Lambda function with different input
-    Given a Lambda function named "test-function"
-    When I invoke the Lambda function with payload
-      """
-      {
-        "name": "John Doe"
-      }
-      """
-    Then the Lambda function should return status code 200
-    And the Lambda function response should contain "John Doe"
-</antArtifact>
-
-6. Configure Behave:
-
-Create a `behave.ini` file in your project root:
-
-```ini
-[behave]
-paths = features
-show_skipped = false
-show_timings = true
-```
-
-7. Run your tests:
-
-Execute the following command in your project root:
+1. Make sure your `requirements.txt` file includes moto:
 
 ```
 behave
+boto3
+moto
+pytest
 ```
 
-This setup provides a basic framework for regression testing AWS Lambda functions and Glue jobs using Behave. You can expand on this by adding more scenarios, implementing additional step definitions for Glue jobs, and creating more utility functions as needed.
+2. If you're still having issues, you might want to check your Python environment and make sure there are no conflicts with other installed packages.
 
-Remember to use mock services (like moto) for local testing to avoid incurring AWS costs and to keep your tests isolated from the actual AWS environment.
+3. You can also try using moto's stand-alone server for more complex scenarios. This involves running a separate moto server and configuring your boto3 client to use it.
 
-Would you like me to explain or elaborate on any part of this setup?
+If you're still encountering issues after these changes, please provide more details about the error message you're seeing, and I'll be happy to help further troubleshoot.
