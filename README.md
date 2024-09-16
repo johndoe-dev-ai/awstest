@@ -1,92 +1,199 @@
-# awstest
-
- I see. The "role cannot be assumed" error typically occurs when there's an issue with the IAM role you're trying to use for your Lambda function. Since we're working in a testing environment with mocked AWS services, we need to adjust our approach. Here's how we can address this:
-
-1. First, let's modify the `create_mock_lambda` function in your `aws_utils.py` file to use a dummy role ARN:
+ I'd be happy to help you create a functional testing framework using Behave for regression testing of Redshift tables. Let's break this down into steps and discuss the approach, along with some test cases.
 
 
 
-<antArtifact identifier="aws-utils" type="application/vnd.ant.code" language="python" title="Updated AWS Utility Functions">
-import boto3
-from moto import mock_aws
+<antArtifact identifier="behave-redshift-framework" type="application/vnd.ant.code" language="python" title="Basic Behave Framework for Redshift Testing">
+# File: features/environment.py
 
-@mock_aws
-def create_mock_lambda(function_name, handler, code):
-    lambda_client = boto3.client('lambda', region_name='us-east-1')
-    response = lambda_client.create_function(
-        FunctionName=function_name,
-        Runtime='python3.8',
-        Role='arn:aws:iam::123456789012:role/dummy-role',  # Dummy role ARN
-        Handler=handler,
-        Code={'ZipFile': code}
+import psycopg2
+from config import redshift_config
+
+def before_all(context):
+    # Set up Redshift connection
+    context.conn = psycopg2.connect(
+        host=redshift_config['host'],
+        port=redshift_config['port'],
+        dbname=redshift_config['dbname'],
+        user=redshift_config['user'],
+        password=redshift_config['password']
     )
-    return response
+    context.cursor = context.conn.cursor()
 
-def invoke_lambda(function_name, payload):
-    lambda_client = boto3.client('lambda', region_name='us-east-1')
-    response = lambda_client.invoke(
-        FunctionName=function_name,
-        Payload=payload
-    )
-    return response
+def after_all(context):
+    # Close Redshift connection
+    context.cursor.close()
+    context.conn.close()
 
-# Other functions remain the same...
-</antArtifact>
+# File: features/steps/redshift_steps.py
 
-2. Now, let's update the `lambda_steps.py` file to use this modified function:
-
-
-
-<antArtifact identifier="lambda-steps" type="application/vnd.ant.code" language="python" title="Updated Behave Steps for Lambda Testing">
 from behave import given, when, then
-from utils.aws_utils import create_mock_lambda, invoke_lambda
-from moto import mock_aws
-import json
 
-@given('a Lambda function named "{function_name}"')
-@mock_aws
-def step_create_lambda(context, function_name):
-    context.function_name = function_name
-    create_mock_lambda(
-        function_name=function_name,
-        handler='index.handler',
-        code=b'def handler(event, context): return {"statusCode": 200, "body": json.dumps({"message": "Hello, " + event["name"]})}'
-    )
+@given('the Redshift table "{table_name}" exists')
+def step_impl(context, table_name):
+    context.cursor.execute(f"SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = '{table_name}')")
+    assert context.cursor.fetchone()[0], f"Table {table_name} does not exist"
 
-@when('I invoke the Lambda function with payload')
-@mock_aws
-def step_invoke_lambda(context):
-    payload = json.dumps({"name": "John Doe"})
-    context.response = invoke_lambda(context.function_name, payload)
+@when('I query the table "{table_name}"')
+def step_impl(context, table_name):
+    context.cursor.execute(f"SELECT * FROM {table_name} LIMIT 1")
+    context.result = context.cursor.fetchone()
 
-@then('the Lambda function should return status code {status_code:d}')
-def step_check_lambda_status(context, status_code):
-    assert context.response['StatusCode'] == status_code
+@then('the query should return results')
+def step_impl(context):
+    assert context.result is not None, "Query returned no results"
 
-@then('the Lambda function response should contain "{message}"')
-def step_check_lambda_response(context, message):
-    response_payload = json.loads(context.response['Payload'].read().decode('utf-8'))
-    assert message in response_payload['body']
+# File: features/redshift_tests.feature
+
+Feature: Redshift Table Testing
+
+  Scenario: Verify table existence and data
+    Given the Redshift table "example_table" exists
+    When I query the table "example_table"
+    Then the query should return results
 </antArtifact>
 
-3. Ensure your `lambda_tests.feature` file matches the steps:
+Now, let's discuss the approach and some test cases for your Redshift testing framework:
 
-<antArtifact identifier="lambda-feature" type="application/vnd.ant.code" language="gherkin" title="Updated Behave Feature for Lambda Testing">
-Feature: AWS Lambda Function Tests
+1. Setup:
+   - Install Behave and psycopg2 (for Redshift connectivity)
+   - Create a config file to store Redshift connection details
+   - Set up the basic Behave directory structure (features, steps, environment.py)
 
-  Scenario: Invoke Lambda function and check response
-    Given a Lambda function named "test-function"
-    When I invoke the Lambda function with payload
-    Then the Lambda function should return status code 200
-    And the Lambda function response should contain "John Doe"
+2. Connection Management:
+   - Use environment.py to manage Redshift connections (as shown in the artifact)
+
+3. Step Definitions:
+   - Create step definitions for common Redshift operations (as shown in the artifact)
+
+4. Test Cases:
+   Here are some test cases you might want to include:
+
+   a. Table Existence:
+      - Verify that expected tables exist after data loading
+
+   b. Data Integrity:
+      - Check for null values in critical columns
+      - Verify data types of columns
+      - Check for duplicate records
+
+   c. Data Consistency:
+      - Compare row counts between source and destination
+      - Verify sum of numeric columns matches source data
+
+   d. Data Transformation:
+      - Check if data transformations were applied correctly
+
+   e. Performance:
+      - Measure query execution time for critical queries
+
+   f. Data Freshness:
+      - Verify that data was loaded within expected timeframes
+
+Here's an example of how you might implement some of these test cases:
+
+
+
+<antArtifact identifier="behave-redshift-framework" type="application/vnd.ant.code" language="python" title="Extended Behave Framework for Redshift Testing">
+# File: features/steps/redshift_steps.py
+
+from behave import given, when, then
+import time
+
+@given('the Redshift table "{table_name}" exists')
+def step_impl(context, table_name):
+    context.cursor.execute(f"SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = '{table_name}')")
+    assert context.cursor.fetchone()[0], f"Table {table_name} does not exist"
+
+@when('I query the table "{table_name}"')
+def step_impl(context, table_name):
+    context.cursor.execute(f"SELECT * FROM {table_name} LIMIT 1")
+    context.result = context.cursor.fetchone()
+
+@then('the query should return results')
+def step_impl(context):
+    assert context.result is not None, "Query returned no results"
+
+@then('the column "{column_name}" in table "{table_name}" should not contain null values')
+def step_impl(context, column_name, table_name):
+    context.cursor.execute(f"SELECT COUNT(*) FROM {table_name} WHERE {column_name} IS NULL")
+    null_count = context.cursor.fetchone()[0]
+    assert null_count == 0, f"Column {column_name} contains {null_count} null values"
+
+@then('the row count of table "{table_name}" should match the source count of {expected_count:d}')
+def step_impl(context, table_name, expected_count):
+    context.cursor.execute(f"SELECT COUNT(*) FROM {table_name}")
+    actual_count = context.cursor.fetchone()[0]
+    assert actual_count == expected_count, f"Row count mismatch. Expected {expected_count}, got {actual_count}"
+
+@when('I execute the query "{query}"')
+def step_impl(context, query):
+    start_time = time.time()
+    context.cursor.execute(query)
+    end_time = time.time()
+    context.query_time = end_time - start_time
+
+@then('the query execution time should be less than {max_time:f} seconds')
+def step_impl(context, max_time):
+    assert context.query_time < max_time, f"Query took {context.query_time} seconds, which is more than the maximum allowed time of {max_time} seconds"
+
+# File: features/redshift_tests.feature
+
+Feature: Redshift Table Testing
+
+  Scenario: Verify table existence and data
+    Given the Redshift table "example_table" exists
+    When I query the table "example_table"
+    Then the query should return results
+
+  Scenario: Check for null values in critical column
+    Given the Redshift table "customer_data" exists
+    Then the column "customer_id" in table "customer_data" should not contain null values
+
+  Scenario: Verify row count matches source data
+    Given the Redshift table "sales_data" exists
+    Then the row count of table "sales_data" should match the source count of 10000
+
+  Scenario: Check query performance
+    When I execute the query "SELECT * FROM large_table WHERE date > '2023-01-01'"
+    Then the query execution time should be less than 5.0 seconds
 </antArtifact>
 
-These changes should resolve the role assumption error you're encountering. Here's what we've done:
+This extended framework provides a more comprehensive set of test cases for your Redshift tables. To set this up end-to-end:
 
-1. We're using a dummy role ARN in the `create_mock_lambda` function. Moto doesn't actually validate this role, so it should work for our testing purposes.
-2. We've simplified the Lambda function creation process by removing the explicit role parameter from the step definition.
-3. We've updated the Lambda function code to use the `name` from the event, which matches our test scenario.
+1. Install required packages:
+   ```
+   pip install behave psycopg2-binary
+   ```
 
-After making these changes, try running your Behave tests again. The role assumption error should be resolved, and you should be able to test your Lambda function logic without issues.
+2. Create a config file (config.py) with your Redshift connection details:
+   ```python
+   redshift_config = {
+       'host': 'your-redshift-host',
+       'port': 5439,
+       'dbname': 'your-database',
+       'user': 'your-username',
+       'password': 'your-password'
+   }
+   ```
 
-If you encounter any other errors or have questions about this setup, please let me know, and I'll be happy to help further.
+3. Set up your project structure:
+   ```
+   your_project/
+   ├── config.py
+   └── features/
+       ├── environment.py
+       ├── redshift_tests.feature
+       └── steps/
+           └── redshift_steps.py
+   ```
+
+4. Implement the code from the artifacts in their respective files.
+
+5. Run your tests using the command:
+   ```
+   behave
+   ```
+
+This framework allows you to easily add more specific test cases as needed. You can extend the step definitions and feature files to cover more scenarios specific to your data and business rules.
+
+Would you like me to explain any part of this framework in more detail?
