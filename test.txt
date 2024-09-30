@@ -1,117 +1,60 @@
- Understood. I'll modify the function to save the generated metadata to a file named after the input CSV file, with "_metadata.txt" appended. Here's the updated version:
+import jaydebeapi
+import boto3
 
-```python
-import csv
-import json
-from typing import List, Dict, Any
-from datetime import datetime
-import re
-import os
+# Initialize a Boto3 session using default credentials
+session = boto3.Session()
+credentials = session.get_credentials().get_frozen_credentials()
 
-def generate_and_save_metadata(csv_file_path: str) -> None:
-    metadata = generate_metadata_from_csv(csv_file_path)
-    
-    # Generate the metadata file name
-    base_name = os.path.splitext(csv_file_path)[0]
-    metadata_file_path = f"{base_name}_metadata.txt"
-    
-    # Save metadata to file
-    with open(metadata_file_path, 'w') as f:
-        json.dump(metadata, f, indent=2)
-    
-    print(f"Metadata saved to {metadata_file_path}")
+# Extract AWS credentials
+aws_access_key_id = credentials.access_key
+aws_secret_access_key = credentials.secret_key
+aws_session_token = credentials.token  # Needed if using temporary credentials
 
-def generate_metadata_from_csv(csv_file_path: str) -> List[Dict[str, Any]]:
-    metadata = []
-    
-    with open(csv_file_path, 'r', newline='') as csvfile:
-        csv_reader = csv.reader(csvfile)
-        
-        # Extract header and convert to lowercase
-        header = [col.lower() for col in next(csv_reader)]
-        
-        # Read the first data row to infer data types
-        first_data_row = next(csv_reader)
-        
-        for col_name, value in zip(header, first_data_row):
-            data_type = infer_data_type(value)
-            
-            metadata_item = {
-                'name': col_name,
-                'description': '',  # Left blank as per instructions
-                'dataType': data_type
-            }
-            metadata.append(metadata_item)
-    
-    return metadata
+# JDBC driver class and path
+jdbc_driver_name = 'com.amazon.redshift.jdbc42.Driver'
+jdbc_driver_path = '/path/to/AwsRedshiftJDBC42-2.1.0.9.jar'  # Update with your driver path
 
-def infer_data_type(value: str) -> str:
-    # Check for empty value
-    if not value.strip():
-        return 'string'  # Default to string for empty values
-    
-    # Check for boolean
-    if value.lower() in ('true', 'false'):
-        return 'boolean'
-    
-    # Check for integer
-    if re.match(r'^-?\d+$', value):
-        return 'integer'
-    
-    # Check for float/double
-    if re.match(r'^-?\d+\.\d+$', value):
-        return 'double'
-    
-    # Check for date
-    try:
-        datetime.strptime(value, '%Y-%m-%d')
-        return 'date'
-    except ValueError:
-        pass
-    
-    # Check for timestamp/datetime
-    datetime_formats = [
-        '%Y-%m-%d %H:%M:%S',
-        '%Y-%m-%dT%H:%M:%S',
-        '%Y-%m-%d %H:%M:%S.%f',
-        '%Y-%m-%dT%H:%M:%S.%f'
-    ]
-    for fmt in datetime_formats:
-        try:
-            datetime.strptime(value, fmt)
-            return 'timestamp'
-        except ValueError:
-            continue
-    
-    # If none of the above, assume it's a string
-    return 'string'
+# Redshift cluster details
+cluster_endpoint = '<your-cluster-endpoint>'  # e.g., 'redshift-cluster-1.abc123xyz.us-west-2.redshift.amazonaws.com'
+database_name = '<database-name>'
+port = 5439  # Default Redshift port
+iam_db_user = '<your-iam-db-user>'  # The IAM user mapped to a database user
 
-# Example usage
-if __name__ == "__main__":
-    csv_file_path = 'your_csv_file.csv'
-    generate_and_save_metadata(csv_file_path)
-```
+# Build the JDBC URL
+jdbc_url = f'jdbc:redshift:iam://{cluster_endpoint}:{port}/{database_name}'
 
-Key changes in this version:
+# Connection properties
+connection_properties = {
+    'AccessKeyID': aws_access_key_id,
+    'SecretAccessKey': aws_secret_access_key,
+    'SessionToken': aws_session_token,
+    'DbUser': iam_db_user,
+    'ssl': 'true',
+    # 'DbGroups': 'group1,group2',  # Optional: Specify DB groups if needed
+    # 'EndpointUrl': '<vpc-endpoint-url>',  # Optional: Specify VPC endpoint if required
+}
 
-1. Added a new function `generate_and_save_metadata` that:
-   - Calls `generate_metadata_from_csv` to create the metadata
-   - Constructs the output file name by appending "_metadata.txt" to the original CSV file name (without extension)
-   - Saves the metadata as JSON to the constructed file name
+# Convert properties to list format expected by JayDeBeApi
+conn_args = [jdbc_url, connection_properties]
 
-2. The main execution now calls `generate_and_save_metadata` instead of just generating and printing the metadata.
+# Establish the connection
+conn = jaydebeapi.connect(
+    jdbc_driver_name,
+    conn_args,
+    jars=jdbc_driver_path
+)
 
-3. Added a print statement to inform the user where the metadata file has been saved.
+# Create a cursor object
+cursor = conn.cursor()
 
-To use this script:
+# Execute a query
+cursor.execute("SELECT * FROM your_table LIMIT 5")
 
-1. Save it as a Python file (e.g., `csv_metadata_generator.py`)
-2. Run it from the command line, providing the path to your CSV file:
+# Fetch and print the results
+results = cursor.fetchall()
+for row in results:
+    print(row)
 
-   ```
-   python csv_metadata_generator.py
-   ```
-
-   (Make sure to replace 'your_csv_file.csv' in the script with the actual CSV file path, or modify the script to accept command-line arguments)
-
-This script will generate the metadata and save it to a file named after your CSV file with "_metadata.txt" appended. For example, if your CSV file is named "data.csv", the metadata will be saved to "data_metadata.txt" in the same directory.
+# Close the cursor and the connection
+cursor.close()
+conn.close()
