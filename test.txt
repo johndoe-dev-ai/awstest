@@ -1,9 +1,11 @@
- I understand. I'll create a Python function that reads a CSV file, extracts the header, converts column names to lowercase, and generates metadata based on the column names and data types inferred from the second row. Here's the function:
+ 
 
 ```python
 import csv
 import json
 from typing import List, Dict, Any
+from datetime import datetime
+import re
 
 def generate_metadata_from_csv(csv_file_path: str) -> List[Dict[str, Any]]:
     metadata = []
@@ -30,18 +32,45 @@ def generate_metadata_from_csv(csv_file_path: str) -> List[Dict[str, Any]]:
     return metadata
 
 def infer_data_type(value: str) -> str:
-    try:
-        int(value)
+    # Check for empty value
+    if not value.strip():
+        return 'string'  # Default to string for empty values
+    
+    # Check for boolean
+    if value.lower() in ('true', 'false'):
+        return 'boolean'
+    
+    # Check for integer
+    if re.match(r'^-?\d+$', value):
         return 'integer'
+    
+    # Check for float/double
+    if re.match(r'^-?\d+\.\d+$', value):
+        return 'double'
+    
+    # Check for date
+    try:
+        datetime.strptime(value, '%Y-%m-%d')
+        return 'date'
     except ValueError:
+        pass
+    
+    # Check for timestamp/datetime
+    datetime_formats = [
+        '%Y-%m-%d %H:%M:%S',
+        '%Y-%m-%dT%H:%M:%S',
+        '%Y-%m-%d %H:%M:%S.%f',
+        '%Y-%m-%dT%H:%M:%S.%f'
+    ]
+    for fmt in datetime_formats:
         try:
-            float(value)
-            return 'double'
+            datetime.strptime(value, fmt)
+            return 'timestamp'
         except ValueError:
-            if value.lower() in ('true', 'false'):
-                return 'boolean'
-            # You might want to add more sophisticated date/timestamp detection here
-            return 'string'
+            continue
+    
+    # If none of the above, assume it's a string
+    return 'string'
 
 # Example usage
 if __name__ == "__main__":
@@ -50,24 +79,27 @@ if __name__ == "__main__":
     print(json.dumps(metadata, indent=2))
 ```
 
-This script does the following:
+This improved version includes the following enhancements:
 
-1. The `generate_metadata_from_csv` function:
-   - Opens the CSV file
-   - Reads the header and converts column names to lowercase
-   - Reads the first data row to infer data types
-   - Creates metadata for each column
+1. The `infer_data_type` function now handles:
+   - Boolean values
+   - Integers
+   - Floats/doubles
+   - Dates (in 'YYYY-MM-DD' format)
+   - Timestamps/datetimes (in various common formats)
+   - Strings (as a fallback)
 
-2. The `infer_data_type` function:
-   - Attempts to determine the data type of each value
-   - Currently handles integer, double (float), boolean, and defaults to string
-   - You may want to enhance this function to detect date and timestamp formats more accurately
+2. It uses regular expressions to more accurately detect numeric types.
 
-3. The metadata is returned as a list of dictionaries, each containing:
-   - `name`: The lowercase column name
-   - `description`: An empty string (as per your instructions)
-   - `dataType`: The inferred data type
+3. It checks for multiple datetime formats to accommodate different timestamp representations.
 
-To use this function, simply provide the path to your CSV file. The script will print the generated metadata as JSON when run directly.
+4. Empty values are treated as strings by default.
 
-Note that this is a basic implementation and may need adjustments based on your specific CSV format and requirements. For instance, you might want to add more sophisticated type inference, handle empty values, or add custom logic for specific column names.
+This implementation should cover most common data types you'd encounter in a CSV file. However, keep in mind that inference based on a single row may not always be accurate for the entire dataset. For more robust type inference, you might want to:
+
+1. Sample multiple rows to confirm the data type.
+2. Implement more sophisticated logic for specific column names (e.g., always treat a "date_of_birth" column as a date).
+3. Handle localized date formats if necessary.
+4. Add logic to differentiate between float and decimal types based on precision.
+
+You can further customize this function based on your specific requirements and the expected format of your CSV files.
