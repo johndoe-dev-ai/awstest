@@ -1,1 +1,73 @@
+ I understand. I'll create a Python function that reads a CSV file, extracts the header, converts column names to lowercase, and generates metadata based on the column names and data types inferred from the second row. Here's the function:
 
+```python
+import csv
+import json
+from typing import List, Dict, Any
+
+def generate_metadata_from_csv(csv_file_path: str) -> List[Dict[str, Any]]:
+    metadata = []
+    
+    with open(csv_file_path, 'r', newline='') as csvfile:
+        csv_reader = csv.reader(csvfile)
+        
+        # Extract header and convert to lowercase
+        header = [col.lower() for col in next(csv_reader)]
+        
+        # Read the first data row to infer data types
+        first_data_row = next(csv_reader)
+        
+        for col_name, value in zip(header, first_data_row):
+            data_type = infer_data_type(value)
+            
+            metadata_item = {
+                'name': col_name,
+                'description': '',  # Left blank as per instructions
+                'dataType': data_type
+            }
+            metadata.append(metadata_item)
+    
+    return metadata
+
+def infer_data_type(value: str) -> str:
+    try:
+        int(value)
+        return 'integer'
+    except ValueError:
+        try:
+            float(value)
+            return 'double'
+        except ValueError:
+            if value.lower() in ('true', 'false'):
+                return 'boolean'
+            # You might want to add more sophisticated date/timestamp detection here
+            return 'string'
+
+# Example usage
+if __name__ == "__main__":
+    csv_file_path = 'your_csv_file.csv'
+    metadata = generate_metadata_from_csv(csv_file_path)
+    print(json.dumps(metadata, indent=2))
+```
+
+This script does the following:
+
+1. The `generate_metadata_from_csv` function:
+   - Opens the CSV file
+   - Reads the header and converts column names to lowercase
+   - Reads the first data row to infer data types
+   - Creates metadata for each column
+
+2. The `infer_data_type` function:
+   - Attempts to determine the data type of each value
+   - Currently handles integer, double (float), boolean, and defaults to string
+   - You may want to enhance this function to detect date and timestamp formats more accurately
+
+3. The metadata is returned as a list of dictionaries, each containing:
+   - `name`: The lowercase column name
+   - `description`: An empty string (as per your instructions)
+   - `dataType`: The inferred data type
+
+To use this function, simply provide the path to your CSV file. The script will print the generated metadata as JSON when run directly.
+
+Note that this is a basic implementation and may need adjustments based on your specific CSV format and requirements. For instance, you might want to add more sophisticated type inference, handle empty values, or add custom logic for specific column names.
