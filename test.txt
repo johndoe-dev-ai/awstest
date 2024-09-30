@@ -1,4 +1,4 @@
- 
+ Understood. I'll modify the function to save the generated metadata to a file named after the input CSV file, with "_metadata.txt" appended. Here's the updated version:
 
 ```python
 import csv
@@ -6,6 +6,20 @@ import json
 from typing import List, Dict, Any
 from datetime import datetime
 import re
+import os
+
+def generate_and_save_metadata(csv_file_path: str) -> None:
+    metadata = generate_metadata_from_csv(csv_file_path)
+    
+    # Generate the metadata file name
+    base_name = os.path.splitext(csv_file_path)[0]
+    metadata_file_path = f"{base_name}_metadata.txt"
+    
+    # Save metadata to file
+    with open(metadata_file_path, 'w') as f:
+        json.dump(metadata, f, indent=2)
+    
+    print(f"Metadata saved to {metadata_file_path}")
 
 def generate_metadata_from_csv(csv_file_path: str) -> List[Dict[str, Any]]:
     metadata = []
@@ -75,31 +89,29 @@ def infer_data_type(value: str) -> str:
 # Example usage
 if __name__ == "__main__":
     csv_file_path = 'your_csv_file.csv'
-    metadata = generate_metadata_from_csv(csv_file_path)
-    print(json.dumps(metadata, indent=2))
+    generate_and_save_metadata(csv_file_path)
 ```
 
-This improved version includes the following enhancements:
+Key changes in this version:
 
-1. The `infer_data_type` function now handles:
-   - Boolean values
-   - Integers
-   - Floats/doubles
-   - Dates (in 'YYYY-MM-DD' format)
-   - Timestamps/datetimes (in various common formats)
-   - Strings (as a fallback)
+1. Added a new function `generate_and_save_metadata` that:
+   - Calls `generate_metadata_from_csv` to create the metadata
+   - Constructs the output file name by appending "_metadata.txt" to the original CSV file name (without extension)
+   - Saves the metadata as JSON to the constructed file name
 
-2. It uses regular expressions to more accurately detect numeric types.
+2. The main execution now calls `generate_and_save_metadata` instead of just generating and printing the metadata.
 
-3. It checks for multiple datetime formats to accommodate different timestamp representations.
+3. Added a print statement to inform the user where the metadata file has been saved.
 
-4. Empty values are treated as strings by default.
+To use this script:
 
-This implementation should cover most common data types you'd encounter in a CSV file. However, keep in mind that inference based on a single row may not always be accurate for the entire dataset. For more robust type inference, you might want to:
+1. Save it as a Python file (e.g., `csv_metadata_generator.py`)
+2. Run it from the command line, providing the path to your CSV file:
 
-1. Sample multiple rows to confirm the data type.
-2. Implement more sophisticated logic for specific column names (e.g., always treat a "date_of_birth" column as a date).
-3. Handle localized date formats if necessary.
-4. Add logic to differentiate between float and decimal types based on precision.
+   ```
+   python csv_metadata_generator.py
+   ```
 
-You can further customize this function based on your specific requirements and the expected format of your CSV files.
+   (Make sure to replace 'your_csv_file.csv' in the script with the actual CSV file path, or modify the script to accept command-line arguments)
+
+This script will generate the metadata and save it to a file named after your CSV file with "_metadata.txt" appended. For example, if your CSV file is named "data.csv", the metadata will be saved to "data_metadata.txt" in the same directory.
