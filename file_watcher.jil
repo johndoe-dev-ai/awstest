@@ -1,0 +1,19 @@
+/* ---------------------------------------------
+   Job Name: WATCH_DONE_FILE
+   Description: Runs the watch_done_file.sh script daily
+   --------------------------------------------- */
+
+insert_job: WATCH_DONE_FILE   job_type: CMD
+description: "Watch for .done file arrival"
+owner: autosys_user
+permission: gx,ge,wx
+date_conditions: y
+days_of_week: all
+start_times: "00:00"
+command: /path/to/watch_done_file.sh
+machine: hostname
+profile: /home/autosys_user/.profile
+std_out_file: /path/to/logs/WATCH_DONE_FILE.out
+std_err_file: /path/to/logs/WATCH_DONE_FILE.err
+alarm_if_fail: 1
+max_run_alarm: 600 /* Alarm if job runs for more than 10 hours */
