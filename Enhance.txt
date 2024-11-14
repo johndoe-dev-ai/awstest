@@ -1,0 +1,103 @@
+ I'll help you create a shell script that reads the JSON config and processes files according to your requirements. The script will:
+1. Read the JSON config file
+2. Accept a section name (MTS or TNCAP) as input
+3. Copy matching files or create empty CSV files if none exist
+
+Here's the shell script:
+
+```bash
+#!/bin/bash
+
+# Check if required arguments are provided
+if [ $# -ne 3 ]; then
+    echo "Usage: $0 <config_file> <section_name> <yyyymmdd>"
+    exit 1
+fi
+
+CONFIG_FILE=$1
+SECTION=$2
+DATE=$3
+PROCESSING_DIR="processing"
+
+# Create processing directory if it doesn't exist
+mkdir -p "$PROCESSING_DIR"
+
+# Function to create empty CSV file
+create_empty_csv() {
+    local pattern=$1
+    local date=$2
+    touch "$PROCESSING_DIR/${pattern}_${date}.csv"
+    echo "Created empty CSV file: ${pattern}_${date}.csv"
+}
+
+# Extract patterns using jq based on section
+# Assuming jq is installed
+patterns=$(jq -r --arg SECTION "$SECTION" '.[$SECTION] | to_entries[] | .value' "$CONFIG_FILE")
+
+if [ -z "$patterns" ]; then
+    echo "Section $SECTION not found in config file"
+    exit 1
+fi
+
+# Process each pattern
+echo "$patterns" | while read -r pattern; do
+    # Remove quotes if present
+    pattern=${pattern//\"/}
+    
+    # Check if files matching pattern exist in source directory
+    found=false
+    
+    # Look for files in the date directory
+    if [ -d "$DATE" ]; then
+        for file in "$DATE"/*; do
+            if [[ $file == *"$pattern"* ]]; then
+                cp "$file" "$PROCESSING_DIR/"
+                echo "Copied $file to processing directory"
+                found=true
+            fi
+        done
+    else
+        echo "Directory $DATE does not exist"
+    fi
+    
+    # If no matching files found, create empty CSV
+    if [ "$found" = false ]; then
+        create_empty_csv "$pattern" "$DATE"
+    fi
+done
+```
+
+To use this script:
+
+1. Save it as `process_files.sh`
+2. Make it executable:
+```bash
+chmod +x process_files.sh
+```
+
+3. Run it with required parameters:
+```bash
+./process_files.sh config.json MTS 20240114
+```
+or
+```bash
+./process_files.sh config.json TNCAP 20240114
+```
+
+The script will:
+- Read the config.json file
+- Extract patterns for the specified section (MTS or TNCAP)
+- Look for matching files in the date directory
+- Copy matching files to the processing directory
+- Create empty CSV files for patterns where no matching files were found
+
+Requirements:
+- jq must be installed (for JSON parsing)
+- The script assumes the source files are in a directory named with the date format (yyyymmdd)
+- The processing directory will be created if it doesn't exist
+
+Example outputs:
+- If a file matching `mmf_olc_orders` is found in `20240114/`, it will be copied to `processing/`
+- If no file is found, it will create `processing/mmf_olc_orders_20240114.csv`
+
+Would you like me to explain any part of the script in more detail or make any modifications?
