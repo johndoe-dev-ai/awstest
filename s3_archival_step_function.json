@@ -1,0 +1,89 @@
+{
+  "Comment": "S3 Archival Framework State Machine",
+  "StartAt": "GetActiveRules",
+  "States": {
+    "GetActiveRules": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "ConfigReaderLambda",
+        "Payload": {}
+      },
+      "ResultSelector": {
+        "rules.$": "$.Payload.rules"
+      },
+      "ResultPath": "$",
+      "Next": "ProcessRulesMap",
+      "Retry": [
+        {
+          "ErrorEquals": ["States.TaskFailed"],
+          "IntervalSeconds": 5,
+          "MaxAttempts": 3,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.ErrorInfo",
+          "Next": "Failed"
+        }
+      ]
+    },
+    "ProcessRulesMap": {
+      "Type": "Map",
+      "ItemsPath": "$.rules",
+      "Iterator": {
+        "StartAt": "ProcessSingleRule",
+        "States": {
+          "ProcessSingleRule": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::lambda:invoke",
+            "Parameters": {
+              "FunctionName": "ArchivalProcessorLambda",
+              "Payload.$": "$"
+            },
+            "ResultPath": "$.ProcessRuleResult",
+            "End": true,
+            "Retry": [
+              {
+                "ErrorEquals": ["States.TaskFailed"],
+                "IntervalSeconds": 5,
+                "MaxAttempts": 3,
+                "BackoffRate": 2.0
+              }
+            ],
+            "Catch": [
+              {
+                "ErrorEquals": ["States.ALL"],
+                "ResultPath": "$.ErrorInfo",
+                "Next": "FailInMap"
+              }
+            ]
+          }
+        }
+      },
+      "Next": "AllRulesProcessed",
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.ErrorInfo",
+          "Next": "Failed"
+        }
+      ]
+    },
+    "FailInMap": {
+      "Type": "Fail",
+      "Cause": "Map State Failed"
+    },
+    "AllRulesProcessed": {
+      "Type": "Pass",
+      "Comment": "All rules have been processed successfully.",
+      "End": true
+    },
+    "Failed": {
+      "Type": "Fail",
+      "Cause": "State Machine Failed"
+    }
+  }
+}
