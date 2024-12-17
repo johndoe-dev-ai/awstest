@@ -16,33 +16,33 @@ class LifecycleCreation:
         logger.info("Initializing LifecycleCreation class")
         self.s3_client = boto3.client('s3')
         self.dynamodb = boto3.resource('dynamodb')
-        self.default_rules = ['dmt-wh-raw-LifecycleRule', 'ExpiredObjectDeleteMarker']
-        self.raw_bucketName = 'dmt-wh-raw-[AccountDetails]'.replace('[AccountDetails]', account_details)
-        logger.info(f"Raw bucket name set to: {self.raw_bucketName}")
+        self.default_rules = ['ct-db-base-LifecycleRule', 'ExpiredObjectDeleteMarker']
+        self.base_bucketName = 'ct-db-base-[AccountDetails]'.replace('[AccountDetails]', account_details)
+        logger.info(f"Raw bucket name set to: {self.base_bucketName}")
 
     def main(self):
         logger.info("Starting main function")
-        table_archive = self.dynamodb.Table('DataLensS3ObjectArchival')
-        logger.info("Scanning DynamoDB table: DataLensS3ObjectArchival")
+        table_archive = self.dynamodb.Table('PayerS3ObjectArchival')
+        logger.info("Scanning DynamoDB table: PayerS3ObjectArchival")
         response_archive_scan = table_archive.scan()
-        current_rules = self.current_lcm_rules_def(self.raw_bucketName)
+        current_rules = self.current_lcm_rules_def(self.base_bucketName)
         rule_ids_from_db = self.rule_ids_from_db(response_archive_scan)
         rule_list = []
 
         for feed in response_archive_scan['Items']:
             logger.info('Currently working for feed: ' + str(feed))
             job_group_name = feed['jobGroupName']
-            raw_tag = feed['rawClass']
-            raw_transition = feed['rawTransition']
-            raw_expiration = feed['rawExpiration']
-            raw_prefix = feed['rawSource']
+            base_tag = feed['rawClass']
+            base_transition = feed['rawTransition']
+            base_expiration = feed['rawExpiration']
+            base_prefix = feed['rawSource']
             prep_archival = feed['prepArchival']
-            logger.info(f"Fetching objects for prefix: {raw_prefix}")
-            object_arr = self.get_all_obj(self.raw_bucketName, raw_prefix)
+            logger.info(f"Fetching objects for prefix: {base_prefix}")
+            object_arr = self.get_all_obj(self.base_bucketName, base_prefix)
             logger.info(f"Checking tags for {len(object_arr)} objects")
-            object_arr = self.check_tag(self.raw_bucketName, object_arr, raw_tag, raw_transition, raw_expiration)
+            object_arr = self.check_tag(self.base_bucketName, object_arr, base_tag, base_transition, base_expiration)
             logger.info(f"Adding lifecycle rule for JobGroupName: {job_group_name}")
-            rule_list.append((raw_tag, raw_transition, raw_expiration))
+            rule_list.append((base_tag, base_transition, base_expiration))
 
         rule_set = set(rule_list)
         rule_list = list(rule_set)
@@ -54,7 +54,7 @@ class LifecycleCreation:
             new_rules.append(self.create_lcm_rule(rule[0], rule[1], rule[2]))
 
         logger.info("Creating and updating bucket lifecycle configuration")
-        self.create_lcm(self.raw_bucketName, current_rules, self.default_rules, new_rules, rule_ids_from_db)
+        self.create_lcm(self.base_bucketName, current_rules, self.default_rules, new_rules, rule_ids_from_db)
         logger.info("Main function execution completed")
 
     def get_all_obj(self, bucketName, prefix):
