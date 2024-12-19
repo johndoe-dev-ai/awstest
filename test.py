@@ -38,12 +38,12 @@ def get_active_archival_configs(table_name):
         return []
 
 
-def update_or_create_lifecycle_rule(bucket, prefix, storage_class, days_to_archive, tag_filter_required, days_to_expire):
+def update_or_create_lifecycle_rule(bucket, prefix, storage_class, days_to_archive, tag_filter_required, days_to_expire, noncurrent_days_to_expire):
     """
     Update an existing S3 lifecycle rule if it exists, or create a new one.
     Handles current and noncurrent versions of objects.
     Adds a tag filter if TagFilterRequired is True.
-    Adds expiration logic if NoOfDaysToExpire is specified.
+    Adds expiration logic if NoOfDaysToExpire and NoncurrentVersionExpireDays are specified.
     """
     rule_id = f"{prefix.replace('/', '-').replace('_', '-')}-deep-archive"
 
@@ -95,6 +95,10 @@ def update_or_create_lifecycle_rule(bucket, prefix, storage_class, days_to_archi
     # Add expiration logic if specified
     if days_to_expire:
         new_rule['Expiration'] = {'Days': days_to_expire}
+    if noncurrent_days_to_expire:
+        new_rule['NoncurrentVersionExpiration'] = {
+            'NoncurrentDays': noncurrent_days_to_expire
+        }
 
     # Check for existing rule and update if found
     for rule in rules:
@@ -132,9 +136,13 @@ def lambda_handler(event, context):
             storage_class = config['StorageClass']
             tag_filter_required = config.get('TagFilterRequired', False)
             days_to_expire = int(config.get('NoOfDaysToExpire', 0)) or None
+            noncurrent_days_to_expire = int(config.get('NoncurrentVersionExpireDays', 0)) or None
 
             print(f"Processing Job Group: {job_group_name}")
-            update_or_create_lifecycle_rule(bucket, prefix, storage_class, days_to_archive, tag_filter_required, days_to_expire)
+            update_or_create_lifecycle_rule(
+                bucket, prefix, storage_class, days_to_archive,
+                tag_filter_required, days_to_expire, noncurrent_days_to_expire
+            )
 
         except KeyError as e:
             print(f"Missing configuration key: {e}")
