@@ -33,9 +33,9 @@ def main():
     new_files = []
     for file_key in data_files:
         print(f"Processing: {file_key}")
-        df = read_s3_csv(bucket, file_key)
+        df = read_s3_csv_gz(bucket, file_key)
         filtered_df = filter_data(df, prefixes, object_types, archive_days)
-        new_file_key = upload_filtered_file(bucket, filtered_df, file_key)
+        new_file_key = upload_filtered_file_gz(bucket, filtered_df, file_key)
         new_files.append({'Bucket': bucket, 'Key': new_file_key})
     
     # Overwrite existing JSON manifest file
@@ -62,9 +62,9 @@ def get_dynamodb_filters(table):
             archive_days = int(item['NoOfDaysToArchive'])
     return prefixes, object_types, archive_days
 
-def read_s3_csv(bucket, file_key):
+def read_s3_csv_gz(bucket, file_key):
     path = f"s3://{bucket}/{file_key}"
-    return spark.read.csv(path, header=True)
+    return spark.read.option("header", "true").csv(path, compression="gzip")
 
 def filter_data(df, prefixes, object_types, archive_days):
     conditions = []
@@ -72,21 +72,22 @@ def filter_data(df, prefixes, object_types, archive_days):
         prefix_condition = col('Key').rlike(f"^({'|'.join(prefixes)})")
         conditions.append(prefix_condition)
     if object_types:
-        object_condition = col('ObjectOwner').isin(object_types)
+        # Add condition to filter object types based on file extensions
+        object_condition = col('Key').rlike(f"\.({'|'.join(object_types)})$")
         conditions.append(object_condition)
     if archive_days:
         date_limit = datetime.utcnow() - timedelta(days=archive_days)
-        date_condition = col('LastModifiedDate') < lit(date_limit.strftime('%Y-%m-%dT%H:%M:%S'))
+        date_condition = col('LastModifiedDate') < lit(date_limit.strftime('%Y-%m-%dT%H:%M:%S.%fZ'))
         conditions.append(date_condition)
     
     for condition in conditions:
         df = df.filter(condition)
     return df
 
-def upload_filtered_file(bucket, df, original_key):
+def upload_filtered_file_gz(bucket, df, original_key):
     new_key = f"processed/{os.path.basename(original_key)}"
     output_path = f"s3://{bucket}/{new_key}"
-    df.write.csv(output_path, mode='overwrite', header=True)
+    df.write.option("header", "true").csv(output_path, mode='overwrite', compression="gzip")
     print(f"Filtered file uploaded: {new_key}")
     return new_key
 
