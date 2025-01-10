@@ -1,0 +1,42 @@
+import json
+import os
+
+def read_json(file_path):
+    """Reads a JSON file from the local filesystem and returns its content as a dictionary."""
+    with open(file_path, 'r') as file:
+        return json.load(file)
+
+def write_json(file_path, data):
+    """Writes a dictionary to a JSON file on the local filesystem."""
+    with open(file_path, 'w') as file:
+        json.dump(data, file, indent=4)
+
+def generate_json_files(input_file, output_dir, source_system_attr, num_files):
+    """Generates multiple JSON files with modified source system attribute."""
+    # Read the input JSON from the local filesystem
+    data = read_json(input_file)
+    
+    for i in range(1, num_files + 1):
+        # Modify the source system attribute
+        modified_data = data.copy()
+        modified_data[source_system_attr] = f"HOME{i}"
+        
+        # Define the output file path for the new JSON file
+        output_file = os.path.join(output_dir, f"output_{i}.json")
+        
+        # Write the modified JSON to the local filesystem
+        write_json(output_file, modified_data)
+        
+        print(f"Created {output_file} with {source_system_attr} set to HORNET{i}")
+
+# Example usage
+input_file = 'path/to/input.json'  # Path to the input JSON file
+output_dir = 'path/to/output/directory'  # Directory where output JSON files will be saved
+source_system_attr = 'sourceSystem'  # Attribute to modify
+num_files = 1000  # Number of JSON files to generate
+
+# Ensure output directory exists
+os.makedirs(output_dir, exist_ok=True)
+
+# Generate JSON files
+generate_json_files(input_file, output_dir, source_system_attr, num_files)
