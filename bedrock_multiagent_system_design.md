@@ -33,19 +33,33 @@ This document outlines the architecture for a Text-to-SQL application using AWS 
 
 ### **Data Flow**
 
-```mermaid
-flowchart TD
-    A[User Query Input] -->|API Gateway| B(Orchestrator Agent)
-    B -->|Intent & Schema Retrieval| C[Schema & Metadata]
-    C -->|Pass to SQL Generator| D(SQL Generation Agent)
-    D -->|Uses Knowledge Layer| E[Knowledge Layer (JSON/CSV)]
-    D -->|Generates SQL Query| F(SQL Executor Handling Agent)
-    F -->|Executes Query| G(Amazon Athena)
-    G -->|Results| H[Return Response to UI]
-    G -->|Error Detected?| I{Error?}
-    I -- No --> H
-    I -- Yes -->|Refine Query & Retry| D
-    I -- Max Retries Reached --> J[Error Message to UI]
+#### **System Workflow**
+
+1. **User Query Submission** → User submits a natural language query through the UI.
+2. **Intent Extraction & Schema Retrieval** → The Orchestrator Agent extracts intent and retrieves schema details.
+3. **SQL Generation** → SQL Generation Agent constructs a query using metadata and the knowledge layer.
+4. **Execution & Refinement** → SQL Executor Handling Agent executes the query in Athena.
+   - If errors occur, it refines and retries up to **5 times** before failing gracefully.
+5. **Final Output** → The system returns results or an error message to the UI.
+
+#### **Architecture Diagram**
+
+```
++-------------------+       +------------------------+       +-------------------+
+|  User Query UI   | --->  |  Orchestrator Agent    | --->  |  SQL Generation  |
+|                 |       | (NLU & Schema Retrieval)|       |      Agent       |
++-------------------+       +------------------------+       +-------------------+
+                                      |                           |
+                                      v                           v
+                        +----------------------+     +--------------------------+
+                        |  Knowledge Layer     |     |  SQL Executor Handling   |
+                        | (JSON / CSV)         |     | Agent (Exec & Refinement)|
+                        +----------------------+     +--------------------------+
+                                      |                           |
+                                      v                           v
+                               +-------------------+        +------------------+
+                               |  Amazon Athena   | -----> |  Response to UI  |
+                               +-------------------+        +------------------+
 ```
 
 ## **3. AWS Services Used**
@@ -93,7 +107,32 @@ flowchart TD
 | orders     | order_id        | id           | INT       | customers  | orders.customer_id = customers.id |
 | orders     | customer_name   | client_name  | STRING    |            |                                 |
 
-## **6. Benefits of this Architecture**
+## **6. Pros and Cons of Single-Agent vs Multi-Agent System**
+
+### **Single-Agent System**
+
+#### ✅ Pros:
+- Simpler to implement and maintain.
+- Lower latency since all tasks are handled in a single execution.
+- Fewer inter-agent communication overheads.
+
+#### ❌ Cons:
+- Difficult to scale as responsibilities increase.
+- Harder to debug since all logic resides in one agent.
+- Performance bottleneck if agent handles multiple tasks simultaneously.
+
+### **Multi-Agent System (Chosen Approach)**
+
+#### ✅ Pros:
+- **Scalability:** Each agent handles a specialized task, making it easier to scale.
+- **Modular Debugging:** Issues can be traced to a specific agent.
+- **Better Performance:** Tasks are distributed, reducing bottlenecks.
+
+#### ❌ Cons:
+- **Inter-agent communication overhead** can introduce latency.
+- **More complex implementation** compared to a single-agent system.
+
+## **7. Benefits of this Architecture**
 
 ✅ **Optimized Query Generation** → Using schema metadata and predefined join conditions.
 ✅ **Efficient Error Handling** → SQL execution is self-healing via iterative refinement.
@@ -107,6 +146,3 @@ flowchart TD
 - Implement the **knowledge layer (JSON/CSV)** structure.
 - Develop AWS Lambda functions for **agent orchestration**.
 - Set up **Athena query execution** with Bedrock integration.
-
-Would you like additional refinements or implementation guidance?
-
