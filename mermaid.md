@@ -3,31 +3,31 @@ graph TD
     subgraph "Log Sources (Platform Agnostic)"
         LS1[AWS CloudWatch Logs]
         LS2[Azure Monitor Logs]
-        LS3[On-Prem Apps / Servers (File Logs)]
+        LS3["On-Prem Apps / Servers (File Logs)"]
         LS4[Kubernetes Cluster Logs]
         LS5[Other Cloud/SaaS Logs]
     end
 
     subgraph "1. Log Ingestion & Buffering"
         direction LR
-        LA[Log Agents/Forwarders <br/> (Fluentd, Logstash, Azure Monitor Agent, CloudWatch Agent, Custom Scripts)]
-        LB[Log Buffer/Stream <br/> (Azure Event Hubs / Kafka / AWS Kinesis)]
+        LA["Log Agents/Forwarders <br/> (Fluentd, Logstash, Azure Monitor Agent, CloudWatch Agent, Custom Scripts)"]
+        LB["Log Buffer/Stream <br/> (Azure Event Hubs / Kafka / AWS Kinesis)"]
         LA --> LB
     end
 
     subgraph "2. Log Processing & Aggregation"
         direction TB
-        SA[Stream Processing <br/> (Azure Stream Analytics / Azure Functions / Spark Streaming)]
-        AGG[Central Log Aggregation <br/> (Azure Data Explorer (ADX) / Azure Log Analytics Workspace / Elasticsearch)]
+        SA["Stream Processing <br/> (Azure Stream Analytics / Azure Functions / Spark Streaming)"]
+        AGG["Central Log Aggregation <br/> (Azure Data Explorer (ADX) / Azure Log Analytics Workspace / Elasticsearch)"]
         SA -- Structured Logs --> AGG
     end
 
     subgraph "3. AI Analysis Core (Azure)"
         direction TB
-        ORC[Orchestrator <br/> (Azure Logic Apps / Azure Functions)]
-        AOAI[Azure OpenAI Service <br/> (GPT models for Analysis, Classification, Summarization, Q&A)]
-        KB[Knowledge Base / Historical Data <br/> (Azure Cosmos DB / Azure SQL / Vector DB in Azure AI Search)]
-        ML[Optional: Custom ML Models <br/> (Azure Machine Learning for specific anomaly detection)]
+        ORC["Orchestrator <br/> (Azure Logic Apps / Azure Functions)"]
+        AOAI["Azure OpenAI Service <br/> (GPT models for Analysis, Classification, Summarization, Q&A)"]
+        KB["Knowledge Base / Historical Data <br/> (Azure Cosmos DB / Azure SQL / Vector DB in Azure AI Search)"]
+        ML["Optional: Custom ML Models <br/> (Azure Machine Learning for specific anomaly detection)"]
 
         ORC -- Trigger Analysis --> AOAI
         AOAI -- Analyze Logs, Query History --> KB
@@ -39,13 +39,13 @@ graph TD
 
     subgraph "4. Alerting & Presentation"
         direction LR
-        ALT[Alerting Engine <br/> (Azure Monitor Alerts / Custom Alerting Service)]
-        DASH[Dashboard / UI <br/> (Azure Dashboards / Power BI / Grafana / Custom Web App)]
-        NOTIF[Notification Channels <br/> (Email, Teams, Slack, PagerDuty)]
+        ALT["Alerting Engine <br/> (Azure Monitor Alerts / Custom Alerting Service)"]
+        DASH["Dashboard / UI <br/> (Azure Dashboards / Power BI / Grafana / Custom Web App)"]
+        NOTIF["Notification Channels <br/> (Email, Teams, Slack, PagerDuty)"]
     end
 
     subgraph "Security & Governance (Cross-Cutting)"
-        SEC[Security <br/> (Azure Key Vault, Managed Identities, Azure Policy, Network Security Groups, RBAC)]
+        SEC["Security <br/> (Azure Key Vault, Managed Identities, Azure Policy, Network Security Groups, RBAC)"]
     end
 
     %% Data Flow Arrows
@@ -77,4 +77,3 @@ graph TD
     KB -- Encryption, Access --> SEC
     ALT -- Access Control --> SEC
     DASH -- User Authentication --> SEC
-```
