@@ -7,7 +7,7 @@
 | 6 | Knowledgebase (Vectorstore/OpenSearch) | Provides schema-level data to LlamaIndex from vector embeddings. |
 | 7 | Knowledgebase Bucket | Stores database/table info in markdown format (KMS-CMK encrypted) that feeds the vector store. |
 | 8 | AWS Bedrock LLMs | Receives prompt + schema context and generates the SQL query. |
-| 9 | Athena | Executes the generated SQL query against data cataloged in *EDP Central Catalog*. |
+| 9 | Athena | Executes the generated SQL query against data cataloged in **. |
 | 10 | React Frontend Service (UI) | Receives final LLM response and displays results to the user. |
 | 11 | AWS RDS Postgres DB | Stores prompt-response-feedback for conversation memory (KMS-CMK encrypted). |
 | 12 | CloudWatch Logging | Logs application and infrastructure-level activity (including ECS and LLM responses). |
