@@ -5,6 +5,10 @@ from llama_index.vector_stores.postgres import PGVectorStore
 from sqlalchemy import make_url
 from llama_index.core import StorageContext, VectorStoreIndex
 from llama_index.readers.s3 import S3Reader
+from llama_index.core.ingestion import IngestionPipeline
+from llama_index.core.node_parser import SentenceSplitter
+from llama_index.core.storage.docstore import SimpleDocumentStore
+from llama_index.core.ingestion.pipeline import DocstoreStrategy
 
 class MarkdownS3ToPGVectorIndexer:
     def __init__(self, 
@@ -22,14 +26,12 @@ class MarkdownS3ToPGVectorIndexer:
     def _load_documents(self):
         print(f"Loading documents from S3 bucket '{self.bucket}'...")
         reader = S3Reader(
-                bucket=self.bucket,
-                prefix=self.prefix,  # Optional: to filter by prefix
-                aws_access_id=os.getenv("AWS_ACCESS_KEY_ID"),
-                aws_access_secret=os.getenv("AWS_SECRET_ACCESS_KEY"),
-                required_exts=['.md'],  # Specify that you want to read markdown files
+            bucket=self.bucket,
+            prefix=self.prefix,
+            aws_access_id=os.getenv("AWS_ACCESS_KEY_ID"),
+            aws_access_secret=os.getenv("AWS_SECRET_ACCESS_KEY"),
+            required_exts=['.md'],
         )
-        
-        
         documents = reader.load_data()
         print(f"Loaded {len(documents)} documents from S3")
         return documents
@@ -61,13 +63,39 @@ class MarkdownS3ToPGVectorIndexer:
         documents = self._load_documents()
         vector_store = self._create_vector_store()
         storage_ctx = StorageContext.from_defaults(vector_store=vector_store)
-        print("Building vector index...")
-        index = VectorStoreIndex.from_documents(
-            documents,
-            storage_context=storage_ctx,
-            show_progress=True,
+
+        print("Building vector index with deduplication using docstore...")
+
+        # Initialize a simple document store
+        docstore = SimpleDocumentStore()
+
+        # Create ingestion pipeline with document management
+        pipeline = IngestionPipeline(
+            transformations=[
+                SentenceSplitter(chunk_size=512, chunk_overlap=20),
+                Settings.embed_model,
+            ],
+            vector_store=vector_store,
+            docstore=docstore,
+            docstore_strategy=DocstoreStrategy.UPSERTS_AND_DELETE
         )
-        print("Index built and persisted to PostgreSQL")
+
+        if os.path.exists("docstore.json"):
+            # Load existing docstore from disk
+            print("Loading existing docstore from disk...")
+            # pipeline.docstore.load_from_disk("docstore.json")
+            pipeline.load("docstore.json")
+
+        # Run ingestion pipeline
+        pipeline.run(documents=documents, show_progress=True)
+
+        # pipeline.docstore.save_to_disk("docstore.json")
+        pipeline.persist("docstore.json")
+
+        # Create index from vector store (for querying if needed)
+        index = VectorStoreIndex.from_vector_store(vector_store=vector_store, storage_context=storage_ctx)
+
+        print("Index built and persisted to PostgreSQL with deduplication")
         return index
 
     def query(self, index, question: str):
@@ -79,12 +107,12 @@ class MarkdownS3ToPGVectorIndexer:
 def main():
     bucket = "bedrock-350474408512-us-east-1"
     prefix = "markdown/"
-    db_url = os.getenv("DATABASE_URL", "postgresql://postgres:yourpassword@localhost:5432/vector_db")
+    db_url = os.getenv("DATABASE_URL", "postgresql://postgres:yourpassword@localhost:5432/vector_db1")
 
     indexer = MarkdownS3ToPGVectorIndexer(bucket, prefix, db_url)
     index = indexer.build_index()
-    response = indexer.query(index, "How many customers are there?")
-    print("Query response:", response)
+    # response = indexer.query(index, "How many customers are there?")
+    # print("Query response:", response)
 
 if __name__ == "__main__":
     main()
