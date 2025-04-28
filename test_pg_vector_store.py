@@ -23,7 +23,7 @@ embed_model = BedrockEmbedding(
 Settings.embed_model = embed_model
 # Initialize the vector store
 vector_store = PGVectorStore.from_params(
-    database="vector_db",
+    database="vector_db1",
     host="localhost",
     port=5432,
     user="postgres",
@@ -39,8 +39,12 @@ index = VectorStoreIndex.from_vector_store(vector_store=vector_store)
 # Create a query engine from the index
 query_engine = index.as_query_engine()
 
+question = "Tell me about the customers who placed orders?"
+
+prompt = f"You are an expert. You need to provide the table_name, columns present in these tables and joining conditions if any for the question {question}. You need to provide the answer in json format. The json should have the following keys: table_name, columns, join_conditions. The values for these keys should be a string. The json should be formatted properly and should not have any extra spaces or new lines. The json should be valid and parsable."
+
 # Perform a query
-response = query_engine.query("What is stored in the database?")
+response = query_engine.query(prompt)
 
 # Output the response
 print(response)
