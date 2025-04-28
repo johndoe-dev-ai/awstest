@@ -1,0 +1,6 @@
+llama-index
+s3fs
+sqlalchemy
+psycopg2-binary
+boto3
+streamlit
