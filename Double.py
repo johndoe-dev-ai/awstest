@@ -1,27 +1,42 @@
 import yaml
-import boto3
 
-# Define custom type for double-quoted strings
+# Custom class to enforce double quotes
 class DoubleQuoted(str): pass
 
-def double_quoted_representer(dumper, data):
+def quoted_presenter(dumper, data):
     return dumper.represent_scalar('tag:yaml.org,2002:str', data, style='"')
 
-yaml.add_representer(DoubleQuoted, double_quoted_representer)
+yaml.add_representer(DoubleQuoted, quoted_presenter)
 
-# Prepare the data
+# Construct YAML data
 data = {
     "inputs": [
         {
             "type": "file",
-            "format": "{format}",
+            "format": "csv",
             "alias": "csv_to_parquet",
-            "path": "{upload_csv_path}",
-            "skip_rows": "{skip_rows}",
-            "delimiter": "{input.delimiter}"
-        },
+            "path": "s3://dmt-wh-xxx/trade_store/processed/dormancy_position/businessdate=20250510/",
+            "skip_rows": 0,
+            "delimiter": ","
+        }
+    ],
+    "outputs": [
         {
-            "name": "Transformations",
+            "type": "file",
+            "format": "parquet",
+            "mode": "overwrite",
+            "alias": "csv_to_parquet",
+            "path": "s3://dmt-wh-xxx/temp/dormancy/dormancy_position/"
+        }
+    ],
+    "post_processing": {
+        "type": "replace",
+        "table": "cd_tradomsmart.tradestore",
+        "alias": "dormancy_position",
+        "temp_loc": "s3://datalens-service/data-xxx/"
+    },
+    "transformations": [
+        {
             "type": "csv_to_parquet",
             "alias": "csv_to_parquet",
             "action": [
@@ -29,38 +44,15 @@ data = {
                     "type": "transform",
                     "list": [
                         {
-                            "businessdate": DoubleQuoted('regexp_replace(businessdate, "-", "")')
+                            "businessdate": DoubleQuoted("regexp_replace(businessdate, '-', '')")
                         }
                     ]
                 }
             ]
-        },
-        {
-            "output": {
-                "type": "file",
-                "format": "parquet",
-                "mode": "overwrite",
-                "alias": "csv_to_parquet{output_string}"
-            }
         }
-    ],
-    "post_processing": {
-        "type": "replace",
-        "table": "{database.name}",
-        "table_name": "{table.name}",
-        "temp_loc": "{temp_location}"
-    }
+    ]
 }
 
-# Dump the YAML string
-yaml_string = yaml.dump(data, default_flow_style=False)
-
-# Upload to S3
-s3 = boto3.client('s3')
-s3.put_object(
-    Bucket='your-bucket-name',
-    Key='your/path/file.yaml',
-    Body=yaml_string.encode('utf-8')
-)
-
-print("YAML uploaded to S3 successfully.")
+# Dump to YAML with enforced double quotes
+yaml_str = yaml.dump(data, default_flow_style=False)
+print(yaml_str)
