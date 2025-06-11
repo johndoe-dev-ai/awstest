@@ -1,155 +1,94 @@
-import numpy as np
-from typing import Optional
-from some_embedding_module import BedrockEmbedding  # Replace with actual import
-from some_llm_module import BedrockConverse  # Replace with actual import
-from some_pgvector_module import PGVectorStore  # Replace with actual import
-from llama_index.indices.vector_store import VectorStoreIndex
-from llama_index.query_engine import RetrieverQueryEngine
-from llama_index.schema import QueryBundle
-from llama_index.response_synthesizers import get_response_synthesizer
-from llama_index.postprocessor import SimilarityPostprocessor
+import boto3 
+import pickle 
+import io 
+import numpy as np 
+from typing import List, Optional 
+from numpy.linalg import norm 
+import logging 
+import threading import time
 
-class InMemorySemanticCache:
-    def __init__(self, threshold=0.9):
-        self.vectors = []
-        self.questions = []
-        self.responses = []
-        self.threshold = threshold
+class InMemorySemanticCache: 
+ def init(self, threshold=0.9): 
+    self.vectors: List[np.ndarray] = [] self.questions: List[str] = [] self.responses: List[str] = [] self.threshold = threshold
 
-    def cosine_similarity(self, a, b):
-        return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
+def add(self, question_vector: np.ndarray, question: str, response: str):
+    self.vectors.append(question_vector)
+    self.questions.append(question)
+    self.responses.append(response)
 
-    def search(self, query_vector):
-        if not self.vectors:
-            return None
-        sims = [self.cosine_similarity(query_vector, vec) for vec in self.vectors]
-        max_sim = max(sims)
-        if max_sim >= self.threshold:
-            idx = sims.index(max_sim)
-            return self.responses[idx]
+def search(self, question_vector: np.ndarray) -> Optional[str]:
+    if not self.vectors:
         return None
 
-    def add(self, query_vector, question, response):
-        self.vectors.append(query_vector)
-        self.questions.append(question)
-        self.responses.append(response)
+    sims = [self._cosine_similarity(question_vector, vec) for vec in self.vectors]
+    best_idx = int(np.argmax(sims))
+    best_sim = sims[best_idx]
 
-class PostgresVectorRetriever:
-    def __init__(self, logger=None):
-        settings = get_settings()
-        self.logger = logger or get_application_logger()
-        self.llm_model = settings.get("BEDROCK_MODEL_ID")
-        self.region_name = settings.get("AWS_REGION")
-        self.embedding_model = settings.get("EMBEDDING_MODEL")
+    if best_sim >= self.threshold:
+        return self.responses[best_idx]
+    return None
 
-        self.db_name = settings.get("POSTGRES_DB")
-        self.db_host = settings.get("POSTGRES_HOST")
-        self.db_port = settings.get_int("POSTGRES_PORT", 5432)
-        self.db_user = settings.get("POSTGRES_USER")
-        self.db_password = settings.get("POSTGRES_PASSWORD")
-        self.table_name = settings.get("TABLE_NAME")
-        self.embed_dim = settings.get_int("EMBED_DIM", 1024)
-        self.debug_mode = settings.get_bool("DEBUG_MODE", True)
+def _cosine_similarity(self, a: np.ndarray, b: np.ndarray) -> float:
+    return float(np.dot(a, b) / (norm(a) * norm(b) + 1e-8))
 
-        self.llm = None
-        self.embed_model = None
-        self.vector_store = None
-        self.index = None
-        self.query_engine = None
+def save_to_s3(self, bucket_name: str, object_key: str, region: str = "ap-south-1"):
+    s3 = boto3.client("s3", region_name=region)
+    cache_data = {
+        "vectors": [v.tolist() for v in self.vectors],
+        "questions": self.questions,
+        "responses": self.responses
+    }
+    byte_stream = io.BytesIO()
+    pickle.dump(cache_data, byte_stream)
+    byte_stream.seek(0)
+    s3.upload_fileobj(byte_stream, Bucket=bucket_name, Key=object_key)
 
-        self.semantic_cache = InMemorySemanticCache()
+def load_from_s3(self, bucket_name: str, object_key: str, region: str = "ap-south-1"):
+    s3 = boto3.client("s3", region_name=region)
+    byte_stream = io.BytesIO()
+    s3.download_fileobj(Bucket=bucket_name, Key=object_key, Fileobj=byte_stream)
+    byte_stream.seek(0)
+    cache_data = pickle.load(byte_stream)
+    self.vectors = [np.array(v, dtype=np.float32) for v in cache_data["vectors"]]
+    self.questions = cache_data["questions"]
+    self.responses = cache_data["responses"]
 
-        self.logger.info("PostgresVectorRetriever initialized")
+class PgRetriever: def init(self, vector_store, embed_model, s3_bucket: str, s3_key: str, region: str = "ap-south-1"): self.vector_store = vector_store self.embed_model = embed_model self.semantic_cache = InMemorySemanticCache() self.s3_bucket = s3_bucket self.s3_key = s3_key self.region = region self.logger = logging.getLogger("PgRetriever") self._load_cache() self._start_periodic_s3_save()
 
-    def create_llm(self):
-        if self.llm is None:
-            self.llm = BedrockConverse(
-                model=self.llm_model,
-                region_name=self.region_name,
-                temperature=0.0,
-                max_tokens=1024
-            )
-        return self.llm
+def _load_cache(self):
+    try:
+        self.semantic_cache.load_from_s3(self.s3_bucket, self.s3_key, self.region)
+        self.logger.info("Semantic cache loaded from S3.")
+    except Exception as e:
+        self.logger.warning(f"Could not load cache from S3: {e}")
 
-    def create_embedding_model(self):
-        if self.embed_model is None:
-            self.embed_model = BedrockEmbedding(
-                model=self.embedding_model,
-                region_name=self.region_name,
-                aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
-                aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY")
-            )
-        return self.embed_model
+def _save_cache(self):
+    try:
+        self.semantic_cache.save_to_s3(self.s3_bucket, self.s3_key, self.region)
+        self.logger.info("Semantic cache saved to S3.")
+    except Exception as e:
+        self.logger.error(f"Could not save cache to S3: {e}")
 
-    def get_schema_template(self):
-        from llama_index.prompts import PromptTemplate
-        template_str = (
-            "Query: {query_str}\n\n"
-            "Context: {context_str}\n\n"
-            "Based on the context, provide a concise answer to the query.\n"
-            "Provide only the information directly relevant to answering the query.\n"
-            "Include ALL column names relevant to: {query_str}."
-        )
-        return PromptTemplate(template_str)
+def _start_periodic_s3_save(self):
+    def save_loop():
+        while True:
+            time.sleep(3600)  # 1 hour
+            self._save_cache()
 
-    def create_vector_store(self):
-        if self.vector_store is None:
-            self.vector_store = PGVectorStore.from_params(
-                database=self.db_name,
-                host=self.db_host,
-                port=self.db_port,
-                user=self.db_user,
-                password=self.db_password,
-                table_name=self.table_name,
-                embed_dim=self.embed_dim,
-                debug=self.debug_mode,
-                cache_ok=True,
-                hybrid_search=True,
-            )
-        return self.vector_store
+    thread = threading.Thread(target=save_loop, daemon=True)
+    thread.start()
 
-    def create_index(self):
-        if self.index is None:
-            vector_store = self.create_vector_store()
-            self.create_llm()
-            self.create_embedding_model()
-            self.index = VectorStoreIndex.from_vector_store(vector_store=vector_store)
-        return self.index
+def retrieve(self, question: str):
+    question_vector = self.embed_model.get_query_embedding(question)
 
-    def create_query_engine(self):
-        if self.query_engine is None:
-            index = self.create_index()
-            template = self.get_schema_template()
-            llm = self.create_llm()
-            response_synthesizer = get_response_synthesizer(
-                response_mode="tree_summarize",
-                llm=llm,
-                text_qa_template=template,
-            )
-            retriever = index.as_retriever(similarity_top_k=15)
-            self.query_engine = RetrieverQueryEngine(
-                retriever=retriever,
-                response_synthesizer=response_synthesizer,
-                node_postprocessors=[SimilarityPostprocessor(similarity_cutoff=0.2)]
-            )
-        return self.query_engine
+    cached_response = self.semantic_cache.search(question_vector)
+    if cached_response:
+        self.logger.info("Cache hit")
+        return cached_response
 
-    def query(self, question: str, format_as_json=False) -> str:
-        self.logger.info(f"Querying vector store with question: {question}")
-        query_engine = self.create_query_engine()
-        embed_model = self.create_embedding_model()
+    self.logger.info("Cache miss. Querying vector store.")
+    response = self.vector_store.similarity_search(question)
 
-        question_vector = embed_model.get_query_embedding(question)
-        cached_response = self.semantic_cache.search(question_vector)
+    self.semantic_cache.add(question_vector, question, response)
+    return response
 
-        if cached_response:
-            self.logger.info("Cache hit. Returning cached response.")
-            return cached_response
-
-        # Fallback to live query
-        response = query_engine.query(question)
-        response_text = str(response)
-
-        self.semantic_cache.add(question_vector, question, response_text)
-        self.logger.info("Query completed and cached successfully.")
-        return response_text
