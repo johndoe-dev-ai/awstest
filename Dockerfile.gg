@@ -1,0 +1,26 @@
+# Setup Python 3.6 pip
+RUN python3.6 -m ensurepip && \
+    python3.6 -m pip install --upgrade pip setuptools wheel numpy cython
+
+# Clone Arrow and build C++
+RUN git clone https://github.com/apache/arrow.git /arrow && \
+    cd /arrow && git checkout apache-arrow-7.0.0
+
+RUN mkdir /arrow/cpp/release && cd /arrow/cpp/release && \
+    cmake .. -DCMAKE_INSTALL_PREFIX=/arrow-install -DCMAKE_BUILD_TYPE=Release \
+        -DARROW_PYTHON=ON -DARROW_PARQUET=ON \
+        -DARROW_WITH_BZ2=ON -DARROW_WITH_ZLIB=ON \
+        -DARROW_WITH_LZ4=ON -DARROW_WITH_ZSTD=ON \
+        -DARROW_WITH_SNAPPY=ON && \
+    make -j$(nproc) && make install
+
+# Build PyArrow Python Wheel
+ENV ARROW_HOME=/arrow-install
+ENV PYARROW_WITH_PARQUET=1
+WORKDIR /arrow/python
+
+RUN python3.6 -m pip install -r requirements.txt && \
+    python3.6 setup.py build_ext --inplace && \
+    python3.6 setup.py bdist_wheel
+
+CMD ["bash"]
